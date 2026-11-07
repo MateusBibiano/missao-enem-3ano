@@ -1908,14 +1908,9 @@ const QUESTIONS = [
   const ftCount = (p) => { const pr = p || P; return QUESTIONS.filter((q) => pr.q[q.id] && pr.q[q.id].ft).length; };
   const phaseDone = (pid, p) => phaseQs(pid).every((q) => isDone(q.id, p));
   const gateOpen = (pid) => !(store.gates && store.gates[pid] === false);
-  function seqUnlocked(pid) {
-    const i = PHASES.findIndex((x) => x.id === pid);
-    return i <= 0 || phaseDone(PHASES[i - 1].id);
-  }
-  function phaseUnlocked(pid) {
-    if (sandbox) return true;
-    return seqUnlocked(pid) && gateOpen(pid);
-  }
+  /* Trilha livre: todas as fases ficam abertas, e o aluno resolve as questões na ordem que quiser. */
+  function seqUnlocked() { return true; }
+  function phaseUnlocked() { return true; }
   const totalStars = (p) => { const pr = p || P; return PHASES.reduce((s, x) => s + ((pr.ph[x.id] && pr.ph[x.id].stars) || 0), 0); };
   const badgeCount = (p) => Object.keys((p || P).badges).length;
 
@@ -1967,6 +1962,7 @@ const QUESTIONS = [
     return { ok: true, L, wrongs, gained, combo, phaseJust, badges, levelUp: lv.idx > lvBefore ? lv : null };
   }
 
+  const nextOpenPhase = () => PHASES.find((x) => !phaseDone(x.id)) || null;
   /* ---------------- Navegação ---------------- */
   const APP = document.getElementById('app');
   let route = { view: 'welcome', id: null };
@@ -2052,7 +2048,7 @@ const QUESTIONS = [
           <div class="hero-copy">
             <div class="hero-brand"><span class="logo-chip"><img src="${IMG.logo.uri}" width="${IMG.logo.w}" height="${IMG.logo.h}" alt="Curso G9 · Semeando Atitudes"></span><span class="eyebrow on-dark">${COURSE.materia} · Turmas ${COURSE.turmasTxt}</span></div>
             <h1 class="hero-title">Missão <span class="mark">ENEM</span> <span class="hero-tag">${COURSE.serie}</span></h1>
-            <p class="hero-lede">${TOTAL} questões do ENEM e vestibulares em ${PHASES.length} fases, de Polígonos a Geometria Analítica. Acerte todas as questões de uma fase para liberar a próxima.</p>
+            <p class="hero-lede">${TOTAL} questões do ENEM e vestibulares em ${PHASES.length} fases, de Polígonos a Geometria Analítica. Todas as fases estão abertas: comece por onde quiser e resolva as questões na ordem que preferir.</p>
             <p class="hero-by">Revisão do Prof. Mateus Bibiano</p>
           </div>
           ${answerSheet()}
@@ -2076,7 +2072,7 @@ const QUESTIONS = [
             <ol class="how">
               <li class="ph-a"><span class="how-n">1</span><div><b>Responda</b><p>Questões do ENEM com gráficos, tabelas e figuras, do jeito que caem na prova.</p></div></li>
               <li class="ph-d"><span class="how-n">2</span><div><b>Acerte para concluir</b><p>Errou? Tente de novo, mas a questão passa a valer menos XP. Depois do 2º erro, aparece uma dica.</p></div></li>
-              <li class="ph-f"><span class="how-n">3</span><div><b>Libere a próxima fase</b><p>Ganhe estrelas e medalhas e suba de nível até Lenda do ENEM.</p></div></li>
+              <li class="ph-f"><span class="how-n">3</span><div><b>Escolha seu caminho</b><p>Todas as fases estão abertas. Ganhe estrelas e medalhas e suba de nível até Lenda do ENEM.</p></div></li>
             </ol>
           </div>
           <div class="teacher-link-row"><button type="button" class="link-btn" data-act="teacher">${ic('gradCap')} Área do professor</button></div>
@@ -2157,8 +2153,8 @@ const QUESTIONS = [
     const ph = PH[pid];
     const rec = P.ph[pid] || { stars: 1, ft: 0 };
     const n = phaseQs(pid).length;
-    const nx = PHASES[ph.n];
-    return `<section class="ph-done ph-${pid}"><span class="ph-done-trophy">${ic('trophy')}</span><div><h2>Fase concluída</h2><p>${starsHTML(rec.stars)} ${rec.ft} de ${n} acertos de primeira</p></div>${nx && !phaseUnlocked(nx.id) ? `<p class="wait-note">${ic('lock')}<span>A Fase ${nx.n} será liberada pelo professor.</span></p>` : nx ? `<button type="button" class="btn btn-primary" data-act="phase" data-id="${nx.id}">Ir para a Fase ${nx.n} ${ic('arrowRight')}</button>` : `<button type="button" class="btn btn-lime" data-act="cert">${ic('award')} Ver certificado</button>`}</section>`;
+    const nx = nextOpenPhase();
+    return `<section class="ph-done ph-${pid}"><span class="ph-done-trophy">${ic('trophy')}</span><div><h2>Fase concluída</h2><p>${starsHTML(rec.stars)} ${rec.ft} de ${n} acertos de primeira</p></div>${nx ? `<button type="button" class="btn btn-primary" data-act="phase" data-id="${nx.id}">Ir para a Fase ${nx.n} ${ic('arrowRight')}</button>` : `<button type="button" class="btn btn-lime" data-act="cert">${ic('award')} Ver certificado</button>`}</section>`;
   }
   function qRow(q, i) {
     const s = P.q[q.id];
@@ -2373,9 +2369,8 @@ const QUESTIONS = [
     <main class="wrap teacher">
       <h1 class="sr-only">Área do professor</h1>
       <section class="card t-card" aria-labelledby="gate-h">
-        <h2 class="h3" id="gate-h">${ic('unlock')} Liberação das fases</h2>
-        <p>Libere cada fase na aula em que for trabalhá-la. A mudança chega aos alunos em até 1 minuto. A regra continua valendo: o aluno só entra numa fase depois de concluir a anterior.</p>
-        <div id="gate-box">${gateBoxHTML()}</div>
+        <h2 class="h3" id="gate-h">${ic('unlock')} Fases abertas</h2>
+        <p>Nesta trilha, todas as fases ficam abertas desde o início. Cada aluno resolve as questões na ordem que quiser, e o certificado sai quando ele concluir as ${TOTAL}.</p>
       </section>
       <section class="card t-card t-rank" aria-labelledby="rank-h">
         <h2 class="h3" id="rank-h">${ic('trophy')} Ranking ao vivo</h2>
@@ -2444,7 +2439,7 @@ const QUESTIONS = [
     const rec = P.ph[pid];
     if (!rec) return;
     const n = phaseQs(pid).length;
-    const nx = PHASES[ph.n];
+    const nx = nextOpenPhase();
     P.pending = null;
     save();
     openModal(`<div class="celebrate ph-${pid}">
@@ -2454,7 +2449,7 @@ const QUESTIONS = [
       <dl class="cel-stats"><div><dt>De primeira</dt><dd>${rec.ft}/${n}</dd></div><div><dt>Bônus da fase</dt><dd>+${PHASE_BONUS}</dd></div><div><dt>XP total</dt><dd>${fmt(P.xp)}</dd></div></dl>
       ${nx
         ? (phaseUnlocked(nx.id)
-          ? `<div class="cel-unlock ph-${nx.id}"><span class="lock-anim">${ic('unlock')}</span><div><b>Fase ${nx.n} liberada</b><span>${nx.name}</span></div></div>`
+          ? `<div class="cel-unlock ph-${nx.id}"><span class="lock-anim">${ic('unlock')}</span><div><b>Sugestão: Fase ${nx.n}</b><span>${nx.name} · ${PHASES.filter((x) => !phaseDone(x.id)).length} ${plural(PHASES.filter((x) => !phaseDone(x.id)).length, 'fase falta', 'fases faltam')}</span></div></div>`
           : `<div class="cel-unlock ph-${nx.id}"><span class="lock-anim">${ic('lock')}</span><div><b>Próxima: Fase ${nx.n} · ${nx.name}</b><span>O professor vai liberar esta fase na aula.</span></div></div>`)
         : `<div class="cel-unlock final"><span class="lock-anim">${ic('trophy')}</span><div><b>Certificado liberado</b><span>Você concluiu as ${TOTAL} questões da Missão ENEM.</span></div></div>`}
       <div class="cel-actions">${nx && phaseUnlocked(nx.id)
