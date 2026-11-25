@@ -854,9 +854,6 @@ p { margin: 0; }
 
 [hidden]{display:none!important}
 
-.mini-b.miss { background: #FBE3E0; border-color: #D9534F; color: #A12A24; }
-.qr-xp.miss { color: #B4372A; }
-.qrow.is-miss .qr-b { background: #FBE3E0; color: #A12A24; }
 </style>
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
 </head>
@@ -1539,7 +1536,6 @@ const QUESTIONS = [
   const ENEM_TIER = { label: 'ENEM', xp: 150, cls: 'mid' };
   const tierOf = (q) => (q.rate == null ? ENEM_TIER : TIERS.find((t) => q.rate >= t.min));
   const DECAY = [1, 0.5, 0.25, 0.1];
-  const MAX_ERR = 2;
   const stakeOf = (q, wrongs) => Math.max(5, Math.round((tierOf(q).xp * DECAY[Math.min(wrongs, DECAY.length - 1)]) / 5) * 5);
   const COMBO_MIN = 3;
   const COMBO_BONUS = 25;
@@ -1558,7 +1554,7 @@ const QUESTIONS = [
     { id: 'fire5', name: 'Em chamas', desc: 'Acerte 5 questões de primeira, em sequência.', icon: 'flame', color: 'p1' },
     { id: 'fire10', name: 'Imparável', desc: 'Acerte 10 questões de primeira, em sequência.', icon: 'zap', color: 'gold' },
     { id: 'perfect', name: 'Fase perfeita', desc: 'Conclua uma fase acertando todas as questões de primeira.', icon: 'trending', color: 'p2' },
-    { id: 'grit', name: 'Persistente', desc: 'Acerte 5 questões na segunda tentativa.', icon: 'mountain', color: 'p3' },
+    { id: 'grit', name: 'Persistente', desc: 'Conclua uma questão depois de errar duas vezes.', icon: 'mountain', color: 'p3' },
     { id: 'half', name: 'Meio caminho', desc: `Conclua ${HALF} questões.`, icon: 'map', color: 'p4' },
     ...PHASES.map((ph, i) => ({ id: 'm_' + ph.id, name: 'Mestre: ' + ph.name, desc: `Conclua a Fase ${ph.n} com 3 estrelas.`, icon: ph.icon, color: 'p' + (i + 1) })),
     { id: 'done', name: 'Missão cumprida', desc: `Conclua as ${TOTAL} questões.`, icon: 'trophy', color: 'gold' },
@@ -1788,28 +1784,27 @@ const QUESTIONS = [
     const lvBefore = levelOf(P.xp).idx;
     const badges = [];
     const award = (id) => { if (!P.badges[id]) { P.badges[id] = Date.now(); badges.push(BADGES.find((b) => b.id === id)); } };
-    const miss = L !== q.ans;
-    if (miss) {
+    if (L !== q.ans) {
       st.w.push(L);
       P.streak = 0;
-      if (st.w.length < MAX_ERR) { save(); return { ok: false, L, wrongs: st.w.length }; }
+      save();
+      return { ok: false, L, wrongs: st.w.length };
     }
     const wrongs = st.w.length;
-    const gained = miss ? 0 : stakeOf(q, wrongs);
+    const gained = stakeOf(q, wrongs);
     let combo = 0;
-    if (!miss && wrongs === 0) {
+    if (wrongs === 0) {
       st.ft = true;
       P.streak += 1;
       P.best = Math.max(P.best, P.streak);
       if (P.streak >= COMBO_MIN) combo = COMBO_BONUS;
     }
     st.done = true; st.xp = gained + combo; st.at = Date.now();
-    if (miss) st.miss = true;
     P.xp += gained + combo;
     award('start');
     if (P.streak >= 5) award('fire5');
     if (P.streak >= 10) award('fire10');
-    if (QUESTIONS.filter((x) => { const y = P.q[x.id]; return y && y.done && !y.miss && y.w.length === 1; }).length >= 5) award('grit');
+    if (wrongs >= 2) award('grit');
     if (doneCount() >= HALF) award('half');
     let phaseJust = null;
     if (phaseDone(q.ph) && !(P.ph[q.ph] && P.ph[q.ph].done)) {
@@ -1827,7 +1822,7 @@ const QUESTIONS = [
     if (levelOf(P.xp).idx === LEVELS.length - 1) award('legend');
     save();
     const lv = levelOf(P.xp);
-    return { ok: !miss, closed: miss, L, wrongs, gained, combo, phaseJust, badges, levelUp: lv.idx > lvBefore ? lv : null };
+    return { ok: true, L, wrongs, gained, combo, phaseJust, badges, levelUp: lv.idx > lvBefore ? lv : null };
   }
 
   const nextOpenPhase = () => PHASES.find((x) => !phaseDone(x.id)) || null;
@@ -1940,7 +1935,7 @@ const QUESTIONS = [
             <h3 class="h3">Como funciona</h3>
             <ol class="how">
               <li class="ph-a"><span class="how-n">1</span><div><b>Responda</b><p>Questões do ENEM com gráficos, tabelas e figuras, do jeito que caem na prova.</p></div></li>
-              <li class="ph-d"><span class="how-n">2</span><div><b>Duas chances por questão</b><p>Errou? Aparece uma dica e você tem mais uma tentativa, valendo metade do XP. Errou de novo? A questão fecha sem XP, mostra a resolução e a trilha segue.</p></div></li>
+              <li class="ph-d"><span class="how-n">2</span><div><b>Acerte para concluir</b><p>Errou? Tente de novo, mas a questão passa a valer menos XP. Depois do 2º erro, aparece uma dica.</p></div></li>
               <li class="ph-f"><span class="how-n">3</span><div><b>Escolha seu caminho</b><p>Todas as fases estão abertas. Ganhe estrelas e medalhas e suba de nível até Lenda do ENEM.</p></div></li>
             </ol>
           </div>
@@ -1961,7 +1956,7 @@ const QUESTIONS = [
     const prev = PHASES[ph.n - 2];
     const left = prev ? phaseQs(prev.id).filter((q) => !isDone(q.id)).length : 0;
     const stars = (P.ph[ph.id] && P.ph[ph.id].stars) || 0;
-    const sheet = qs.map((q, i) => { const s = P.q[q.id]; return `<span class="mini-b${s && s.done ? (s.miss ? ' miss' : ' done') : s && s.w && s.w.length ? ' tried' : ''}">${i + 1}</span>`; }).join('');
+    const sheet = qs.map((q, i) => { const s = P.q[q.id]; return `<span class="mini-b${s && s.done ? ' done' : s && s.w && s.w.length ? ' tried' : ''}">${i + 1}</span>`; }).join('');
     const foot = state === 'locked'
       ? (prev && !seqUnlocked(ph.id)
         ? `<p class="ph-lock">${ic('lock')} Conclua ${prev.name} para liberar: ${plural(left, 'falta', 'faltam')} ${left} ${plural(left, 'questão', 'questões')}</p>`
@@ -2030,11 +2025,11 @@ const QUESTIONS = [
     const t = tierOf(q);
     const state = s && s.done ? 'done' : s && s.w && s.w.length ? 'tried' : 'new';
     const right = state === 'done'
-      ? (s.miss ? `<span class="qr-xp miss">${ic('x')} 0 XP</span>` : `<span class="qr-xp done">${ic('check')} +${s.xp} XP</span>`)
+      ? `<span class="qr-xp done">${ic('check')} +${s.xp} XP</span>`
       : `<span class="tier tier-${t.cls}">${t.label}</span><span class="qr-xp">${ic('zap')} ${stakeOf(q, (s && s.w && s.w.length) || 0)} XP</span>`;
-    return `<li><button type="button" class="qrow is-${state}${s && s.miss ? ' is-miss' : ''}" data-act="q" data-id="${q.id}">
+    return `<li><button type="button" class="qrow is-${state}" data-act="q" data-id="${q.id}">
       <span class="qr-b" aria-hidden="true">${state === 'done' ? q.ans : String(i + 1).padStart(2, '0')}</span>
-      <span class="qr-main"><span class="qr-title">${q.title}</span><span class="qr-meta">${q.src}${q.rate != null ? ` · ${q.rate}% acertaram` : ''}${state === 'tried' ? ` · 1 erro, resta 1 tentativa` : s && s.miss ? ' · encerrada com 2 erros' : ''}</span></span>
+      <span class="qr-main"><span class="qr-title">${q.title}</span><span class="qr-meta">${q.src}${q.rate != null ? ` · ${q.rate}% acertaram` : ''}${state === 'tried' ? ` · ${s.w.length} ${plural(s.w.length, 'erro', 'erros')}` : ''}</span></span>
       <span class="qr-right">${right}</span>
     </button></li>`;
   }
@@ -2093,10 +2088,6 @@ const QUESTIONS = [
   }
   function feedbackHTML(q, s) {
     const r = ui.res;
-    if (s.done && s.miss) {
-      const extra = r && r.closed && r.phaseJust ? `<span class="gain">${ic('trophy')} Bônus da fase: +${PHASE_BONUS} XP</span>` : '';
-      return `<div class="fb fb-bad fb-miss" role="status"><div class="fb-head"><span class="fb-ic">${ic('x')}</span><div><b>Não foi desta vez: questão encerrada.</b><span>Você marcou ${s.w.join(' e ')}. A resposta é a ${q.ans}. Esta questão fica com 0 XP, mas a trilha continua.</span></div></div>${extra ? `<div class="fb-gains">${extra}</div>` : ''}</div>${solutionHTML(q)}`;
-    }
     if (s.done) {
       const fresh = r && r.ok;
       const tries = s.w.length + 1;
@@ -2111,10 +2102,10 @@ const QUESTIONS = [
     const fresh = r && !r.ok;
     const last = s.w[s.w.length - 1];
     const msg = fresh
-      ? `<b>Ainda não: a ${last} não é a resposta.</b><span>Última tentativa, valendo ${stakeOf(q, s.w.length)} XP. Se errar de novo, a questão fecha sem XP.</span>`
-      : `<b>Você já descartou a ${s.w.join(', ')}.</b><span>Resta uma tentativa, valendo ${stakeOf(q, s.w.length)} XP. Se errar de novo, a questão fecha sem XP.</span>`;
+      ? `<b>Ainda não: a ${last} não é a resposta.</b><span>Agora a questão vale ${stakeOf(q, s.w.length)} XP. Tente outra alternativa.</span>`
+      : `<b>Você já descartou: ${s.w.join(', ')}</b><span>A questão vale ${stakeOf(q, s.w.length)} XP agora. Continue tentando.</span>`;
     let h = `<div class="fb fb-bad" role="status"><div class="fb-head"><span class="fb-ic">${ic('x')}</span><div>${msg}</div></div></div>`;
-    if (s.w.length >= 1) {
+    if (s.w.length >= 2) {
       h += `<div class="hint${ui.hint ? ' open' : ''}"><button type="button" class="hint-toggle" data-act="hint" aria-expanded="${ui.hint}">${ic('lightbulb')}<b>Dica liberada</b><span>${ui.hint ? 'Esconder' : 'Ver dica'}</span></button>${ui.hint ? `<div class="hint-body">${q.hint}</div>` : ''}</div>`;
     } else {
       h += `<p class="fb-note">${ic('lightbulb')} Depois do 2º erro, uma dica é liberada.</p>`;
@@ -2158,7 +2149,7 @@ const QUESTIONS = [
         <span class="chip chip-src">${q.src}</span>
         ${q.rate != null ? `<span class="chip">${ic('users')} ${q.rate}% acertaram no ENEM</span>` : ''}
         <span class="tier tier-${t.cls}">${t.label}</span>
-        <span class="chip chip-xp">${ic('zap', 'ic-fill')} ${s.done ? (s.miss ? '0 XP · questão encerrada' : `+${s.xp} XP ganhos`) : `Vale ${stakeOf(q, s.w.length)} XP`}</span>
+        <span class="chip chip-xp">${ic('zap', 'ic-fill')} ${s.done ? `+${s.xp} XP ganhos` : `Vale ${stakeOf(q, s.w.length)} XP`}</span>
       </div>
       <article class="q-card" data-qid="${q.id}">
         <div class="q-body">${q.body}</div>
@@ -2507,7 +2498,7 @@ const QUESTIONS = [
       const evs = [res.ok
         ? { t: now, q: tag, fase: ph.name, res: 'Acertou', tent: res.wrongs + 1, xp: res.gained + res.combo }
         : { t: now, q: tag, fase: ph.name, res: 'Errou', tent: res.wrongs, xp: 0 }];
-      if (res.phaseJust) {
+      if (res.ok && res.phaseJust) {
         evs.push({ t: now, q: `Fase ${ph.n} · ${ph.name} (${P.ph[q.ph].stars} ★)`, fase: ph.name, res: 'Concluiu a fase', tent: 0, xp: PHASE_BONUS });
         if (P.done) evs.push({ t: now, q: 'Missão concluída', fase: ph.name, res: 'Concluiu a missão', tent: 0, xp: 0 });
       }
@@ -2527,13 +2518,7 @@ const QUESTIONS = [
       sfx('wrong');
       if (optEl) { optEl.classList.remove('shake'); void optEl.offsetWidth; optEl.classList.add('shake'); }
       try { if (navigator.vibrate) navigator.vibrate(60); } catch (e) { /* ok */ }
-      if (res.closed) {
-        let delay = 700;
-        if (res.phaseJust) floatXP(PHASE_BONUS);
-        if (res.levelUp) { const lv = res.levelUp; setTimeout(() => { toast(`<b>Novo nível: ${lv.name}!</b>Continue assim.`, { kind: 'level', icon: lv.icon }); sfx('level'); }, delay); delay += 800; }
-        if (!sandbox) res.badges.forEach((b) => { setTimeout(() => toast(`<b>Medalha: ${b.name}</b>${b.desc}`, { kind: 'badge', icon: b.icon }), delay); delay += 900; });
-        setTimeout(() => { const fb2 = $('#feedback'); if (fb2) fb2.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' }); }, 300);
-      } else if (res.wrongs === 1) { const h = $('.hint'); if (h) h.classList.add('pop'); }
+      if (res.wrongs === 2) { const h = $('.hint'); if (h) h.classList.add('pop'); }
       const fb = $('#feedback');
       if (fb) { const r = fb.getBoundingClientRect(); if (r.bottom > window.innerHeight - 90) fb.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' }); }
     }
